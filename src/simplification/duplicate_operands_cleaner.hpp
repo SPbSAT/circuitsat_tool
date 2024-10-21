@@ -48,6 +48,12 @@ class DuplicateOperandsCleaner_ : public ITransformer<CircuitT>
     size_t id_const_false = SIZE_MAX;
 
   public:
+    /**
+     * Applies DuplicateOperandsCleaner_ transformer to `circuit`
+     * @param circuit -- circuit to transform.
+     * @param encoder -- circuit encoder.
+     * @return  circuit and encoder after transformation.
+     */
     CircuitAndEncoder<CircuitT, std::string> transform(
         std::unique_ptr<CircuitT> circuit,
         std::unique_ptr<GateEncoder<std::string>> encoder)
@@ -82,6 +88,12 @@ class DuplicateOperandsCleaner_ : public ITransformer<CircuitT>
         // Rebuild circuit.
         for (auto gate_id : std::ranges::reverse_view(gate_sorting))
         {
+            // First of all, we will determine the correct gate operands by filling `old_to_new_gateId`.
+            //      INPUT(0)        |   In this case gate 2 must contain input zero as an operand instread
+            //      1 = AND(0, 0)   |   of gate 1. So the information we need in the `old_to_new_gateId`
+            //      2 = NOT(1)      |   will be {1: 0}. This means that all users of gate 1 must now use
+            //      OTPUT(2)        |   gate 0.
+
             GateType gate_type = circuit->getGateType(gate_id);
 
             // Count the occurrence of operands in the gate.
@@ -95,7 +107,7 @@ class DuplicateOperandsCleaner_ : public ITransformer<CircuitT>
                 // to this operand or to its negation.
                 if (map_count_operands.size() == 1)
                 {
-                    // В мапе уже правильные (перевешанные) гейты. Нет необходимости использовать getLink_
+                    // No need to use getLink_. The map already has the correct (rehung) gates.
                     GateId const unique_operand = map_count_operands.begin()->first;
                     if (gate_type == GateType::AND || gate_type == GateType::OR || gate_type == GateType::XOR)
                     {
@@ -121,7 +133,7 @@ class DuplicateOperandsCleaner_ : public ITransformer<CircuitT>
                 else if (map_count_operands.empty())
                 {
                     // If, as a result of counting of the operands, an empty map is obtained
-                    // (it can be in gates of type XOR or NXOR), then we know their assignment
+                    // (it can be in gates of type XOR or NXOR), then we know their assignment.
                     if (gate_type == GateType::XOR)
                     {
                         old_to_new_gateId.at(gate_id) = id_const_false;
@@ -133,7 +145,9 @@ class DuplicateOperandsCleaner_ : public ITransformer<CircuitT>
                 }
                 else
                 {
-                    // If after counting there are 2+ operands left, try to find the opposite operands
+                    // If after counting there are 2+ operands left, try to find the opposite operands.
+                    // If gates are found to have opposite operands, then all their users will have to use
+                    // constants (CONST_TRUE, CONST_FALSE) as their operands instead of these gates.
                     bool flag = areThereOppositeOperands_(gate_info, map_count_operands);
                     if (flag && (gate_type == GateType::AND || gate_type == GateType::NOR))
                     {
@@ -159,13 +173,16 @@ class DuplicateOperandsCleaner_ : public ITransformer<CircuitT>
             }
             else
             {
-                // We don't touch anouther gates
+                // We don't touch another gates.
                 old_to_new_gateId.at(gate_id) = gate_id;
             }
 
-            // Let's reassemble the operands, knowing that all the reductions are already taken into account in the map.
+            // The second step. Let's reassemble the operands, knowing that all the reductions are already
+            // taken into account in the map.
+
             GateIdContainer operands{};
-            // Rebuild the gate if necessary (only XOR or NXOR)
+
+            // Rebuild the gate if necessary (only XOR or NXOR).
             if (rebuild_gate)
             {
                 rebuild_gate = false;
@@ -177,6 +194,7 @@ class DuplicateOperandsCleaner_ : public ITransformer<CircuitT>
                 {
                     if (gate_type == GateType::XOR)
                     {
+                        // Users of the current gate will refer to its operand.
                         old_to_new_gateId.at(gate_id) = operands.at(0);
                     }
                     else  // NXOR
@@ -206,9 +224,12 @@ class DuplicateOperandsCleaner_ : public ITransformer<CircuitT>
                         old_to_new_gateId.at(gate_id) = id_const_true;
                     }
                 }
+                // If the gate is left with 2+ operands, then it is considered syntactically correct
+                // and nothing more needs to be done with it and its users.
             }
             else
             {
+                // If possible, we will remove all unnecessary operands using data from map_count_operands.
                 if (csat::utils::symmetricOperatorQ(gate_type))
                 {
                     for (auto [operand, value] : map_count_operands)
@@ -228,6 +249,7 @@ class DuplicateOperandsCleaner_ : public ITransformer<CircuitT>
                 }
             }
 
+            // Construct the gate.
             gate_info.at(gate_id) = {gate_type, operands};
         }
 
@@ -247,6 +269,16 @@ class DuplicateOperandsCleaner_ : public ITransformer<CircuitT>
     };
 
   private:
+    /**
+     * Counts how many operands are in the gate and which ones specifically,
+     * and also reduces them if possible
+     * @param circuit -- our circuit
+     * @param gate_id -- the gate ID for which operands need to be calculated
+     * @param old_to_new_gateId -- Surjection of old gate ids to new gate ids. For using
+     *                             the final (after transformation) operand in the gate (= rehung)
+     * @return map, where the key is gate's operand and the value is how many times this operand
+     *         appears in the gate
+     */
     std::map<GateId, size_t>
     transformOperands_(CircuitT const& circuit, GateId gate_id, std::vector<GateId> const& old_to_new_gateId)
     {
@@ -295,9 +327,15 @@ class DuplicateOperandsCleaner_ : public ITransformer<CircuitT>
         return map_count_operands;
     }
 
+    /**
+     * Give a link either to the gate itself, or to the gate where the users of the gate should refer.
+     * @param gate_id gate's id for which you need to find a link
+     * @param old_to_new_gateId -- Surjection of old gate ids to new gate ids. For using
+     *                             the final (after transformation) operand in the gate (= rehung)
+     * @return gate's id like a link
+     **/
     GateId getLink_(GateId gate_id, std::vector<GateId> const& old_to_new_gateId)
     {
-        // We must give a link either to the gate itself, or to the gate where the users of the gate should refer.
         if (old_to_new_gateId.at(gate_id) != SIZE_MAX)
         {
             return old_to_new_gateId.at(gate_id);
@@ -305,11 +343,18 @@ class DuplicateOperandsCleaner_ : public ITransformer<CircuitT>
         return gate_id;
     }
 
+    /**
+     * Checks if there are opposite operands in the gate
+     * @param gate_info -- container of the new (transformer-modified) circuit
+     * @param map_count_operands -- map, where the key is gate's operand and
+     *                              the value is how many times this operand appears in the gate
+     * @return boolean answer to checks (true or false)
+     **/
     bool areThereOppositeOperands_(
         GateInfoContainer const& gate_info,
         std::map<GateId, size_t> const& map_count_operands)
     {
-        // Due to the fact that new gates of type A can be
+        // Due to the fact that new gates or new links can be
         // formed in the new circuit, we must use gate_info,
         // and not the circuit itself.
         return std::any_of(
@@ -322,16 +367,15 @@ class DuplicateOperandsCleaner_ : public ITransformer<CircuitT>
             });
     }
 
+    /**
+     * Removes opposite operands from gates of type XOR and NXOR
+     * @param gate_info -- container of the new (transformer-modified) circuit
+     * @param map_count_operands -- map, where the key is gate's operand and
+     *                              the value is how many times this operand appears in the gate
+     * @return operands for gate XOR/NXOR
+     */
     GateIdContainer rebuildXORAndNXOR_(GateInfoContainer const& gate_info, std::map<GateId, size_t>& map_count_operands)
     {
-        // TODO: сокращать максимальное количество пар, а не первые попавшиеся. Так например для схемы приведенной ниже
-        //  есть два варианта сокращения пар и зависимости от порядка операндов в мапе (1, 2) или ((0, 1), (2, 3)).
-        //  INPUT(0)
-        //  1 = NOT(0)
-        //  2 = NOT(1)
-        //  3 = NOT(2)
-        //  4 = XOR(0, 1, 2, 3)
-        //
         // Let's collect a complete list of opposite operands.
         size_t number_of_pair = 0;
         for (auto [operand, _] : map_count_operands)
@@ -349,6 +393,7 @@ class DuplicateOperandsCleaner_ : public ITransformer<CircuitT>
             }
         }
 
+        // Form a list of operands without taking into account the found opposites
         GateIdContainer operands{};
         for (auto [operand, value] : map_count_operands)
         {

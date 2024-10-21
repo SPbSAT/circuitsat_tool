@@ -22,14 +22,14 @@ namespace csat::simplification
 {
 
 /**
- * Transformer, that cleans the circuit from constant gates
+ * Transformer, that cleans the circuit from constant gates (like AND(x, NOT(x)) = false)
  *
  *    Before            |          After
  *
- * INPUT(0)             |       INPUT(0)
- * INPUT(1)             |       INPUT(1)
- * INPUT(2)             |       2 = OR(0, 1)
- * 3 = NOT(0)           |       OUTPUT(2)
+ * INPUT(0)             |       INPUT(1)
+ * INPUT(1)             |       INPUT(2)
+ * INPUT(2)             |       5 = OR(1, 2)
+ * 3 = NOT(0)           |       OUTPUT(5)
  * 4 = AND(0, 3)        |
  * 5 = OR(1, 2, 4)      |
  * OUTPUT(5)            |
@@ -45,6 +45,12 @@ class ConstantGateReducer_ : public ITransformer<CircuitT>
     csat::Logger logger{"ConstantGateReducer"};
 
   public:
+    /**
+     * Applies ConstantGateReducer_ transformer to `circuit`
+     * @param circuit -- circuit to transform.
+     * @param encoder -- circuit encoder.
+     * @return  circuit and encoder after transformation.
+     */
     CircuitAndEncoder<CircuitT, std::string> transform(
         std::unique_ptr<CircuitT> circuit,
         std::unique_ptr<GateEncoder<std::string>> encoder)
@@ -74,9 +80,13 @@ class ConstantGateReducer_ : public ITransformer<CircuitT>
             GateType gate_type = circuit->getGateType(gate_id);
             GateIdContainer operands{};
 
+            // After partial circuit calculation, we need to leave only undefined gates.
+            // Defined gates from the circuit must be removed, and users of these gates
+            // must now use CONST_TRUE or CONST_FALSE as their operands.
             if (result_assignment->isUndefined(gate_id) || gate_type == GateType::CONST_TRUE ||
                 gate_type == GateType::CONST_FALSE)
             {
+                // if the operator is not symmetric, we cannot delete its operands even if they are constants
                 if (!csat::utils::symmetricOperatorQ(gate_type))
                 {
                     for (auto operand : circuit->getGateOperands(gate_id))
@@ -226,6 +236,13 @@ class ConstantGateReducer_ : public ITransformer<CircuitT>
     };
 
   private:
+    /**
+     * Give a link either to the gate itself, or to the gate where the users of the gate should refer.
+     * @param gate_id gate's id for which you need to find a link
+     * @param old_to_new_gateId -- Surjection of old gate ids to new gate ids. For using
+     *                             the final (after transformation) operand in the gate (= rehung)
+     * @return gate's id like a link
+     **/
     GateId getLink_(GateId gate_id, std::vector<GateId> const& old_to_new_gateId)
     {
         if (old_to_new_gateId.at(gate_id) != SIZE_MAX)
@@ -235,6 +252,17 @@ class ConstantGateReducer_ : public ITransformer<CircuitT>
         return gate_id;
     }
 
+    /**
+     * Create a subcircuit whose response will be the output (created instead of the outputs
+     * already existing in the original circuit, the value of which became known after the transformation)
+     * @param gate_info -- container of the new (transformer-modified) circuit
+     * @param encoder -- encoder of the new circuit
+     * @param new_output_gates -- outputs in the new circuit
+     * @param new_gate_name_prefix -- prefix for new gates
+     * @param circuit_size -- new circuit size
+     * @param gate_state -- constant true or false instead of which it is necessary to create a subcircuit
+     * @return None. All transformations occur by changing the input data parameters
+     **/
     void createMiniCircuit_(
         GateInfoContainer& gate_info,
         GateEncoder<std::string>& encoder,

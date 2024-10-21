@@ -31,6 +31,12 @@ class ReduceNotComposition_ : public ITransformer<CircuitT>
     std::set<GateType> validParams;
 
   public:
+    /**
+     * Applies ReduceNotComposition_ transformer to `circuit`
+     * @param circuit -- circuit to transform.
+     * @param encoder -- circuit encoder.
+     * @return  circuit and encoder after transformation.
+     */
     CircuitAndEncoder<CircuitT, std::string> transform(
         std::unique_ptr<CircuitT> circuit,
         std::unique_ptr<GateEncoder<std::string>> encoder)
@@ -49,6 +55,7 @@ class ReduceNotComposition_ : public ITransformer<CircuitT>
             GateIdContainer new_operands_{};
             for (GateId operands : circuit->getGateOperands(gateId))
             {
+                // if the current operand is NOT, then we look at its operand and, if possible, reduce the number of NOT
                 if (circuit->getGateType(operands) == GateType::NOT)
                 {
                     new_operands_.push_back(get_operand(*circuit, operands));
@@ -70,6 +77,16 @@ class ReduceNotComposition_ : public ITransformer<CircuitT>
     };
 
   private:
+    /**
+     * Receives gate's ID which type is NOT. If the operand of this gate is also NOT, then the algorithm
+     * looks at the operand of this (finded) gate and so on until it reaches an operand whose type is not NOT.
+     * After counting the number of NOT's encountered, the algorithm reduces them pairwise. As a result,
+     * the output will be either gate's ID whose type is not NOT, or gate's ID whose type is NOT, but its
+     * operand is definitely not NOT.
+     * @param circuit -- circuit to transform.
+     * @param gateId -- gate's ID which type is NOT and for the user of which we should find operand
+     * @return  new gate ID. Operand for user which used `gateId`
+     */
     GateId get_operand(CircuitT const& circuit, GateId gateId)
     {
         bool flag         = false;

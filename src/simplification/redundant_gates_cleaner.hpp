@@ -32,6 +32,12 @@ class RedundantGatesCleaner_ : public ITransformer<CircuitT>
     csat::Logger logger{"RedundantGatesCleaner"};
 
   public:
+    /**
+     * Applies RedundantGatesCleaner_ transformer to `circuit`
+     * @param circuit -- circuit to transform.
+     * @param encoder -- circuit encoder.
+     * @return  circuit and encoder after transformation.
+     */
     CircuitAndEncoder<CircuitT, std::string> transform(
         std::unique_ptr<CircuitT> circuit,
         std::unique_ptr<GateEncoder<std::string>> encoder)
@@ -40,6 +46,7 @@ class RedundantGatesCleaner_ : public ITransformer<CircuitT>
         logger.debug("START RedundantGatesCleaner.");
 
         GateEncoder<GateId> encoder_old_to_new{};
+        // Use dfs to get markers of visited and unvisited gates
         auto mask_use_output = algo::performDepthFirstSearch(*circuit, circuit->getOutputGates());
 
         // first step: getting valid encoding
@@ -55,6 +62,7 @@ class RedundantGatesCleaner_ : public ITransformer<CircuitT>
             logger.debug("Gate number ", gateId, " is redundant and will be removed");
         }
 
+        // Rebuid circuit
         GateInfoContainer gate_info(encoder_old_to_new.size());
         for (GateId gateId = 0; gateId < circuit->getNumberOfGates(); ++gateId)
         {

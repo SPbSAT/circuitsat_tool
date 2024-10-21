@@ -49,14 +49,14 @@ using ReduceNotComposition = csat::simplification::Composition<
     csat::simplification::RedundantGatesCleaner_<csat::DAG> >;
 
 /**
- * Transformer, that cleans the circuit from constant gates
+ * Transformer, that cleans the circuit from constant gates ( like AND(x, NOT(x)) = false )
  *
  *    Before            |          After
  *
- * INPUT(0)             |       INPUT(0)
- * INPUT(1)             |       INPUT(1)
- * INPUT(2)             |       2 = OR(0, 1)
- * 3 = NOT(0)           |       OUTPUT(2)
+ * INPUT(0)             |       INPUT(1)
+ * INPUT(1)             |       INPUT(2)
+ * INPUT(2)             |       5 = OR(1, 2)
+ * 3 = NOT(0)           |       OUTPUT(5)
  * 4 = AND(0, 3)        |
  * 5 = OR(1, 2, 4)      |
  * OUTPUT(5)            |
@@ -78,21 +78,24 @@ using ConstantGateReducer = csat::simplification::Composition<
  *
  * INPUT(0)             |       INPUT(0)
  * INPUT(1)             |       INPUT(1)
- * 2 = AND(0, 0)        |       2 = AND(0, 1)
- * 3 = AND(1, 2)        |       OUTPUT(2)
- * OUTPUT(3)            |
+ * INPUT(2)             |       INPUT(2)
+ * 3 = NOT(0)           |       3 = NOT(0)
+ * 4 = AND(3, 3)        |       5 = AND(0, 3)
+ * 5 = AND(0, 4)        |       6 = OR(1, 2, 5)
+ * 6 = OR(1, 2, 5)      |       OUTPUT(6)
+ * OUTPUT(6)            |
  *
- * And after cleans the circuit from constant gates
+ * And after cleans the circuit from constant gates ( like AND(x, NOT(x)) = false )
  *
  *    Before            |          After
  *
- * INPUT(0)             |       INPUT(0)
- * INPUT(1)             |       INPUT(1)
- * INPUT(2)             |       2 = OR(0, 1)
- * 3 = NOT(0)           |       OUTPUT(2)
- * 4 = AND(0, 3)        |
- * 5 = OR(1, 2, 4)      |
- * OUTPUT(5)            |
+ * INPUT(0)             |       INPUT(1)
+ * INPUT(1)             |       INPUT(2)
+ * INPUT(2)             |       6 = OR(1, 2)
+ * 3 = NOT(0)           |       OUTPUT(6)
+ * 5 = AND(0, 3)        |
+ * 6 = OR(1, 2, 5)      |
+ * OUTPUT(6)            |
  *
  * @tparam CircuitT
  */
