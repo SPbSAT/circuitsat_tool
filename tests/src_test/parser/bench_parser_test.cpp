@@ -153,4 +153,32 @@ TEST(BenchParser, ExternalConstGateType)
     ASSERT_TRUE(circuit->getGateType(4) == csat::GateType::MUX);
 }
 
+TEST(BenchParser, VDD)
+{
+    std::string const test_case = "# Comment Line\n"
+                                  "#\n"
+                                  "   \n"
+                                  " INPUT(     XXX)  \n"
+                                  " ZZZZ  = vdd\n"
+                                  " FFFFF  =      vdd    \n"
+                                  "\n"
+                                  "OUTPUT(   ABC   )\n"
+                                  "   ABC  =   MUX(XXX  , FFFFF,  ZZZZ  ) \n";
+    
+    std::istringstream stream(test_case);
+    csat::parser::BenchToCircuit<csat::DAG> parser;
+    parser.parseStream(stream);
+    auto circuit = parser.instantiate();
+    
+    ASSERT_TRUE(0 == parser.encoder.encodeGate("XXX"));
+    ASSERT_TRUE(1 == parser.encoder.encodeGate("ZZZZ"));
+    ASSERT_TRUE(2 == parser.encoder.encodeGate("FFFFF"));
+    ASSERT_TRUE(3 == parser.encoder.encodeGate("ABC"));
+    
+    ASSERT_TRUE(circuit->getGateType(0) == csat::GateType::INPUT);
+    ASSERT_TRUE(circuit->getGateType(1) == csat::GateType::CONST_TRUE);
+    ASSERT_TRUE(circuit->getGateType(2) == csat::GateType::CONST_TRUE);
+    ASSERT_TRUE(circuit->getGateType(3) == csat::GateType::MUX);
+}
+
 } // namespace

@@ -142,8 +142,12 @@ class IBenchParser : public ICircuitParser
             std::string_view op = line.substr(eq_idx + 1, l_bkt_idx - eq_idx - 1);
             csat::utils::string_utils::trimSpaces(op);
 
-            std::string_view operands_str = line.substr(l_bkt_idx + 1, r_bkt_idx - l_bkt_idx - 1);
-            csat::utils::string_utils::trimSpaces(operands_str);
+            std::string_view operands_str = "";
+            if (r_bkt_idx > l_bkt_idx)
+            {
+                operands_str = line.substr(l_bkt_idx + 1, r_bkt_idx - l_bkt_idx - 1);
+                csat::utils::string_utils::trimSpaces(operands_str);
+            }
 
             GateId const gateId = encodeGate(var_name);
 
@@ -213,11 +217,12 @@ class IBenchParser : public ICircuitParser
     /* Returns delimiters positions ( '=', '(', ')' ) in an operator bench line. */
     std::tuple<size_t, size_t, size_t> _getDelimitersPositions(std::string_view line)
     {
+        std::size_t line_size = line.size();
         // Find special delimiters positions
         std::size_t eq_idx    = std::string::npos;
         std::size_t l_bkt_idx = std::string::npos;
         std::size_t r_bkt_idx = std::string::npos;
-        for (size_t idx = 0; idx < line.size(); ++idx)
+        for (size_t idx = 0; idx < line_size; ++idx)
         {
             switch (line.at(idx))
             {
@@ -236,6 +241,16 @@ class IBenchParser : public ICircuitParser
         }
 
         // Check validity of delimiters position
+        if (l_bkt_idx == std::string::npos)
+        {
+            std::string_view is_operator_vdd = line.substr(eq_idx + 1, line_size - eq_idx - 1);
+            csat::utils::string_utils::trimSpaces(is_operator_vdd);
+            if (is_operator_vdd == "vdd")
+            {
+                return {eq_idx, line_size, line_size};
+            }
+        }
+
         if (eq_idx == std::string::npos || l_bkt_idx == std::string::npos || r_bkt_idx == std::string::npos ||
             eq_idx >= l_bkt_idx || eq_idx >= r_bkt_idx || l_bkt_idx >= r_bkt_idx)
         {

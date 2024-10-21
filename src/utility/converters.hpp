@@ -33,7 +33,8 @@ inline GateType stringToGateType(std::string const& type_name)
         {"BUFF", GateType::BUFF},
 #endif
         {"CONST_FALSE", GateType::CONST_FALSE},
-        {"CONST_TRUE",  GateType::CONST_TRUE }
+        {"CONST_TRUE",  GateType::CONST_TRUE },
+        {"vdd",         GateType::CONST_TRUE }
     };
 
     return _type_map.at(type_name);
